@@ -1,0 +1,12 @@
+target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.log
+.bsp/
+.idea/
+*.iml
+.DS_Store
+bazel-*

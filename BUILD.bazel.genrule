@@ -1,0 +1,8 @@
+genrule(
+    name = "commit",
+    srcs = ["scripts/bazel_commit.sh"],
+    outs = ["commit_runner.sh"],
+    cmd = "cp $(location scripts/bazel_commit.sh) $@",
+    executable = True,
+    visibility = ["//visibility:public"],
+)

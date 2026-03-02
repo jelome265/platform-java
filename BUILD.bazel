@@ -1,0 +1,8 @@
+genrule(
+    name = "commit",
+    srcs = ["scripts/bazel_commit.bat", "scripts/bazel_commit.ps1"],
+    outs = ["commit_runner.bat"],
+    cmd = "copy /y $(location scripts/bazel_commit.bat) $@",
+    executable = True,
+    visibility = ["//visibility:public"],
+)

@@ -105,6 +105,20 @@ public class AmlService {
         );
     }
 
+    /**
+     * Check for structuring (smurfing): many small payments just below thresholds.
+     */
+    public void checkStructuring(UUID userId, double amount, int recentSmallTxCount) {
+        if (recentSmallTxCount > 5 && amount < 1000.0) {
+            AmlAlert alert = new AmlAlert(
+                    UUID.randomUUID(), userId, "STRUCTURING", "HIGH",
+                    String.format("Potential structuring detected: %d small transactions (<1000) for user", recentSmallTxCount)
+            );
+            persistAlert(alert);
+            auditService.log(userId, "AML_STRUCTURING_ALERT", "Potential structuring detected");
+        }
+    }
+
     private void persistAlert(AmlAlert alert) {
         // In production: save to aml_alerts table via AmlAlertRepository
         log.warn("[AML ALERT] type={} severity={} userId={} details={}",

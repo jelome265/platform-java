@@ -1,8 +1,10 @@
 package com.company.payments.service;
 
 import com.company.payments.domain.FxOffer;
+import com.company.payments.domain.SettlementJob;
 import com.company.payments.domain.Wallet;
 import com.company.payments.repository.FxOfferRepository;
+import com.company.payments.repository.SettlementJobRepository;
 import com.company.payments.repository.WalletRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,13 +37,16 @@ public class FxEscrowService {
 
     private final FxOfferRepository fxOfferRepository;
     private final WalletRepository walletRepository;
+    private final SettlementJobRepository settlementJobRepository;
     private final LedgerService ledgerService;
     private final AuditService auditService;
 
     public FxEscrowService(FxOfferRepository fxOfferRepository, WalletRepository walletRepository,
+                           SettlementJobRepository settlementJobRepository,
                            LedgerService ledgerService, AuditService auditService) {
         this.fxOfferRepository = fxOfferRepository;
         this.walletRepository = walletRepository;
+        this.settlementJobRepository = settlementJobRepository;
         this.ledgerService = ledgerService;
         this.auditService = auditService;
     }
@@ -96,21 +101,28 @@ public class FxEscrowService {
                 offer.getBuyAmount().negate(), offer.getBuyCurrency(),
                 Map.of("offer_id", offer.getId().toString(), "side", "buyer"));
 
+        // Phase 2: Create Settlement Job for atomic tracking
+        SettlementJob job = new SettlementJob(UUID.randomUUID(), offer.getId(), SETTLEMENT_TIMEOUT_MINUTES);
+        settlementJobRepository.save(job);
+
         // === ATOMIC SETTLEMENT ===
-        // Seller receives buyer's currency
+        // 1. Prepare: Seller receives buyer's currency
         UUID sellerReceiveTxId = UUID.randomUUID();
         ledgerService.recordEntry(offer.getSellerWalletId(), sellerReceiveTxId, "FX_SETTLEMENT_CREDIT",
                 offer.getBuyAmount(), offer.getBuyCurrency(),
-                Map.of("offer_id", offer.getId().toString(), "settlement", "seller_receives"));
+                Map.of("offer_id", offer.getId().toString(), "settlement", "seller_receives", "job_id", job.getId().toString()));
 
-        // Buyer receives seller's currency
+        // 2. Prepare: Buyer receives seller's currency
         UUID buyerReceiveTxId = UUID.randomUUID();
         ledgerService.recordEntry(buyerWalletId, buyerReceiveTxId, "FX_SETTLEMENT_CREDIT",
                 offer.getSellAmount(), offer.getSellCurrency(),
-                Map.of("offer_id", offer.getId().toString(), "settlement", "buyer_receives"));
+                Map.of("offer_id", offer.getId().toString(), "settlement", "buyer_receives", "job_id", job.getId().toString()));
 
+        job.setStatus("COMMITTED");
         offer.setStatus("COMPLETED");
         offer.setSettledAt(ZonedDateTime.now());
+        
+        settlementJobRepository.save(job);
         fxOfferRepository.save(offer);
 
         auditService.log(buyerId, "FX_OFFER_ACCEPTED",
